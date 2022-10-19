@@ -3,8 +3,8 @@
 /*global goog, Map, let */
 /*jshint esversion: 6 */
 "use strict";
-//
-//btw for developers, jshint is a JS hint which is for detecting bugs
+
+//btw for developers, jshint is a JShint which is for detecting bugs
 
 // General equires
 require("google-closure-library");
@@ -234,13 +234,13 @@ let permabanned_ips = [];
 
 const tempBan = (socket) => {
   const ipIndex = bannedIPs.findIndex((ip) => {
-    return ip === socket.ip;
+    return ip === socket.ipAddress;
   });
 
   if (ipIndex === -1) {
-    if (socket.ip) {
-      bannedIPs.push(socket.ip);
-      util.warn("[tempBan] " + socket.ip + " banned!");
+    if (socket.ipAddress) {
+      bannedIPs.push(socket.ipAddress);
+      util.warn("[tempBan] " + socket.ipAddress + " banned!");
     }
   }
 
@@ -599,7 +599,7 @@ const disableSwearFilter = (socket, clients, args) => {
 const broadcastToPlayers = (socket, clients, args) => {
   try {
     if (socket.player != null && args.length >= 2) {
-      let isMember = isUserTrustedMember(socket.role);
+      let isMember = isUserMember(socket.role);
 
       if (isMember) {
         let a, rest;
@@ -622,80 +622,8 @@ const broadcastToPlayers = (socket, clients, args) => {
 };
 
 //===========================
-// usage: /warn [reason]
+// warn command
 //===========================
-//===========================
-const handleWarnChatCommand = (socket, clients, args, playerId) => {
-  try {
-    let isMember = isUserTrustedMember(socket.role);
-
-    if (!isMember) {
-      util.warn(
-        `[Warn] Authentication required. Username: ${socket.player.name}, Password Hash: ${socket.passwordHash}`
-      );
-      socket.player.body.sendMessage(
-        "Authentication required.",
-        errorMessageColor
-      );
-      return 1;
-    }
-    // ========================================================================================
-    // cmd is the command "/warn" (args[0]).
-    // ...rest is the rest of arguments (args[1] to args[n-1]).
-    const [cmd, ...rest] = args;
-
-    // Construct message from the rest of the args which is an array.
-    const reason = rest.reduce((accumulator, currentValue) => {
-      return accumulator + " " + currentValue;
-    }, "");
-
-    if (!reason || reason.length === 0) {
-      socket.player.sendMessage(
-        "Usage: /warn [reason]. For example:  /warn spawnkilling",
-        errorMessageColor
-      );
-      return 1;
-    }
-    // ========================================================================================
-
-    for (const client of clients) {
-      if (client.player.viewId === playerId) {
-        // Check if warner is trying to warn the player whose role is higher.
-        // ========================================================================
-        let kickerRoleValue = userAccountRoleValues[socket.role];
-        let kickedRoleValue = userAccountRoleValues[client];
-        if (kickerRoleValue <= kickedRoleValue) {
-          socket.player.body.sendMessage(
-            "Unable to kick player with same or higher role.",
-            errorMessageColor
-          );
-          return 1;
-        }
-        if ((kickerRoleValue) => kickedRoleValue) {
-          if (client.player.body !== null) {
-            // ========================================================================
-            client.player.body.sendMessage(
-              `[Warning from ${socket.player.name}] ${reason}`,
-              errorMessageColor
-            );
-            sockets.broadcast(
-              `${socket.player.name} warned ${client.player.name}. Reason: ${reason}`,
-              notificationMessageColor
-            );
-          }
-          /* bot.on('messageCreate', (msg) => {
-    bot.createMessage('1028222560988577802', `**__log__** \n > ${socket.player.name} warned ${client.player.name}. Reason: ${reason}`);
-    console.log('debug');
- }); */
-          break;
-        }
-      }
-    }
-  } catch (error) {
-    util.error("[handleWarnChatCommand]");
-    util.error(error);
-  }
-};
 
 // ===============================================
 // pwd  [password]
@@ -1021,60 +949,53 @@ const handleTempBanChatCommand = (socket, clients, args, playerId) => {
 // ===============================================
 //kick command (/kick [id]) (LAST UPDATED BY FELIX)
 //===============================
-const kickPlayer = (socket, clients, args, playerId) => {
+const kickPlayer = (socket, clients, args) => {
   try {
-    let isMember = isUsermoderator(socket.role);
+    if (socket.player != null && args.length === 2) {
+      let isMember = isUsermoderator(socket.role);
 
-    // ========================================================================================
-    // cmd is the command "/kick" (args[0]).
-    // ...rest is the rest of arguments (args[1] to args[n-1]).
-    const [cmd, ...rest] = args;
+      let clients = sockets.getClients();
 
-    // Construct message from the rest of the args which is an array.
-    const reason = rest.reduce((accumulator, currentValue) => {
-      return accumulator + " " + currentValue;
-    }, "");
+      if (isMember) {
+        let viewId = parseInt(args[1], 10);
 
-    if (!reason || reason.length === 0) {
-      socket.player.sendMessage(
-        "Usage: /kick [reason]. For example:  /kick didn't listen to a warning",
-        errorMessageColor
-      );
-      return 1;
-    }
-    // ========================================================================================
-    let clients = sockets.getClients();
+        for (let i = 0; i < clients.length; ++i) {
+          let client = clients[i];
 
-    if (isMember) {
-      for (let i = 0; i < clients.length; ++i) {
-        let client = clients[i];
-
-        if (client.player.viewId === playerId) {
-          // Check if kicker is trying to kick the player whose role is higher.
-          // ========================================================================
-          let muterRoleValue = userAccountRoleValues[socket.role];
-          let muteeRoleValue = userAccountRoleValues[client.role];
-          if (muterRoleValue <= muteeRoleValue) {
-            socket.player.body.sendMessage(
-              "Unable to kick player with same or higher role.",
-              errorMessageColor
+          if (viewId) {
+            const matches = clients.filter(
+              (client) => client.player.viewId == viewId
             );
-            return 1;
+
+            if (matches.length > 0) {
+              // Check if muter is trying to mute the player whose role is higher.
+              // ========================================================================
+              let kickerRoleValue = userAccountRoleValues[socket.role];
+              let kickedRoleValue = userAccountRoleValues[matches[0].role];
+              if (kickerRoleValue <= kickedRoleValue) {
+                socket.player.body.sendMessage(
+                  "Unable to kick player with same or higher role.",
+                  errorMessageColor
+                );
+                return 1;
+              }
+              if ((kickerRoleValue) => kickedRoleValue) {
+                // ========================================================================
+                matches[0].kick("");
+                sockets.broadcast(
+                  " A Player got kicked by " + socket.player.name
+                );
+              }
+              matches[0].player.body.sendMessage(
+                " You got kicked by " + socket.player.name
+              );
+
+              // damn STOP SPAMMING
+            }
           }
-          // ========================================================================
-          client.talk("y", reason); //send the reason to app.js using WS.
-          sockets.broadcast(
-            `${client.player.name} got kicked by ${socket.player.name}. Reason: ${reason}`,
-            notificationMessageColor
-          );
-          client.player.body.sendMessage(
-            `You got kicked by ${socket.player.name}. Reason: ${reason}`,
-            errorMessageColor
-          );
-          setTimeout(() => {
-            client.kick(`${reason}`);
-          }, 1000); //timeout of 1 second to allow it to send the message above
         }
+      } else {
+        socket.player.body.sendMessage("you do not have kick permission lol");
       }
     } else {
       socket.player.body.sendMessage("usage: /kick [id]");
@@ -1086,70 +1007,51 @@ const kickPlayer = (socket, clients, args, playerId) => {
 
 //===============================
 //===============================
-const killPlayer = (socket, clients, args, playerId) => {
+const killPlayer = (socket, clients, args) => {
   try {
-    let isMember = isUsermoderator(socket.role);
+    if (socket.player != null && args.length === 2) {
+      let isMember = isUserdeveloper(socket.role);
 
-    // ========================================================================================
-    // cmd is the command "/unmute" (args[0]).
-    // ...rest is the rest of arguments (args[1] to args[n-1]).
-    const [cmd, ...rest] = args;
+      let clients = sockets.getClients();
 
-    // Construct message from the rest of the args which is an array.
-    const reason = rest.reduce((accumulator, currentValue) => {
-      return accumulator + " " + currentValue;
-    }, "");
+      if (isMember) {
+        let viewId = parseInt(args[1], 10);
 
-    if (!reason || reason.length === 0) {
-      socket.player.sendMessage(
-        "Usage: /unmute [reason]. For example:  /mute mute appealed",
-        errorMessageColor
-      );
-      return 1;
-    }
-    // ========================================================================================
-    let clients = sockets.getClients();
-
-    if (isMember) {
-      for (let i = 0; i < clients.length; ++i) {
-        let client = clients[i];
-
-        if (client.player.viewId === playerId) {
-          // Check if muter is trying to mute the player whose role is higher.
-          // ========================================================================
-          let muterRoleValue = userAccountRoleValues[socket.role];
-          let muteeRoleValue = userAccountRoleValues[client.role];
-          if (muterRoleValue <= muteeRoleValue) {
-            socket.player.body.sendMessage(
-              "Unable to mute player with same or higher role.",
-              errorMessageColor
+        for (let i = 0; i < clients.length; ++i) {
+          let client = clients[i];
+          if (viewId) {
+            const matches = clients.filter(
+              (client) => client.player.viewId == viewId
             );
-            return 1;
+
+            if (matches.length > 0) {
+              // Check if killer is trying to kill the player whose role is higher.
+              // ========================================================================
+              let kickerRoleValue = userAccountRoleValues[socket.role];
+              let kickedRoleValue = userAccountRoleValues[matches[0].role];
+              if (kickerRoleValue <= kickedRoleValue) {
+                socket.player.body.sendMessage(
+                  "Unable to kill player with same or higher role.",
+                  errorMessageColor
+                );
+                return 1;
+              }
+              if ((kickerRoleValue) => kickedRoleValue) {
+                // ========================================================================
+                let playerTarget = matches[0];
+                playerTarget.body.kill("");
+              }
+            }
           }
-          // ========================================================================
-          let playerTarget = client; //I used to use player.sendMessage from arras tx lol
-          if (playerTarget.player.body !== null) {
-            playerTarget.player.body.sendMessage(
-              `You were killed by ${socket.player.name}. Reason: ${reason}`
-            );
-            setTimeout(() => {
-              // lol
-
-              playerTarget.player.body.destroy("");
-            }, 1000);
-
-            sockets.broadcast(
-              `${socket.player.name} killed ${client.player.name}. Reason: ${reason}`,
-              notificationMessageColor
-            );
-          } //
-        } //
+        }
+      } else {
+        socket.player.body.sendMessage("you do not have Kill permission");
       }
     } else {
-      socket.player.body.sendMessage("you do not have Kill permission");
+      socket.player.body.sendMessage("usage: /kill [id]");
     }
   } catch (error) {
-    util.error("[killPlayer()]");
+    util.error("[kickPlayer()]");
     util.error(error);
   }
 };
@@ -1282,9 +1184,6 @@ const closeArena = (socket, clients, args) => {
     util.error(error);
   }
 };
-
-// ===============================================
-// mapsize handler
 // ===============================================
 const test1 = (socket, clients, args) => {
   try {
@@ -1295,13 +1194,18 @@ const test1 = (socket, clients, args) => {
       if (isMember) {
         // Set up room.
 
-        if (size > 8000 || size < 1000) {
+        if (size > 8000) {
+          socket.player.body.sendMessage(
+            "max mapsize: 8000; min mapsize: 1000;"
+          );
+        }
+        if (size < 1000) {
           socket.player.body.sendMessage(
             "max mapsize: 8000; min mapsize: 1000;"
           );
         } else {
           room.width = size;
-          room.height = size;
+          room.height = room.width;
           let clients = sockets.getClients();
           for (let client of clients) {
             client.talk("M", room.width, room.height);
@@ -1320,65 +1224,7 @@ const test1 = (socket, clients, args) => {
     util.error(error);
   }
 };
-// ===============================================
-
-// ===============================================
-// evaluate handler
-// ===============================================
-const evaluate_script = (socket, clients, args) => {
-  try {
-    let isMember = isUserdeveloper(socket.role);
-
-    if (isMember) {
-      // ================================================================
-      // Parameters and stuff to make it more easy
-      // ================================================================
-      let cs = sockets.getClients();
-      let en = entities;
-      for (let e of en) {
-      for (let c of cs) {
-      
-          // ================================================================
-
-          // ========================================================================================
-          // cmd is the command "/warn" (args[0]).
-          // ...rest is the rest of arguments (args[1] to args[n-1]).
-          const [cmd, ...rest] = args;
-
-          // Construct message from the rest of the args which is an array.
-          const script = rest.reduce((accumulator, currentValue) => {
-            return accumulator + " " + currentValue;
-          }, "");
-
-          if (!script || script.length === 0) {
-            socket.player.sendMessage(
-              "Usage: /eval [script]. For example:  /eval sockets.broadcast('example text')",
-              errorMessageColor
-            );
-            return 1;
-          }
-          try {
-            eval(script); // run it.
-          } catch (error) {
-            console.log(
-              `${socket.player.name} tried to evaluate an invalid script using /eval command. Error code: ${error}`
-            );
-          }
-        }
-      }
-      // ========================================================================================
-    } else {
-      socket.player.body.sendMessage(
-        "This command is only avaible for developers",
-        errorMessageColor
-      );
-    }
-  } catch (error) {
-    util.error("[test1()]");
-    util.error(error);
-  }
-};
-// ===============================================
+//===============================
 var yn = false;
 const atoggle = (socket, clients, args) => {
   try {
@@ -1813,7 +1659,7 @@ const banPlayer = (socket, clients, args) => {
             );
 
             if (matches.length > 0) {
-              // Check if banner is trying to ban the player whose role is higher.
+              // Check if muter is trying to mute the player whose role is higher.
               // ========================================================================
               let kickerRoleValue = userAccountRoleValues[socket.role];
               let kickedRoleValue = userAccountRoleValues[matches[0].role];
@@ -1858,125 +1704,110 @@ const banPlayer = (socket, clients, args) => {
 // ===============================================
 const mutePlayer = (socket, clients, args, playerId) => {
   try {
-    //if (socket.player != null && args.length === 1) {
-    let isMember = isUserTrustedMember(socket.role);
+    if (socket.player != null && args.length === 1) {
+      let isMember = isUserTrustedMember(socket.role);
 
-    if (!isMember) {
-      util.log("[Unauthorized] Mute command. " + socket.player.name);
-      socket.player.body.sendMessage("Unauthorized.", errorMessageColor);
-      return 1;
-    }
-
-    // Check mute command usage count.
-    const usageCount = muteCommandUsageCountLookup[socket.password];
-
-    if (usageCount) {
-      if (usageCount >= 10) {
-        socket.player.body.sendMessage(
-          "Mute usage limit reached.",
-          errorMessageColor
-        );
+      if (!isMember) {
+        util.log("[Unauthorized] Mute command. " + socket.player.name);
+        socket.player.body.sendMessage("Unauthorized.", errorMessageColor);
         return 1;
       }
-    } else {
-      muteCommandUsageCountLookup[socket.password] = 1;
-    }
-    // ========================================================================================
-    // cmd is the command "/warn" (args[0]).
-    // ...rest is the rest of arguments (args[1] to args[n-1]).
-    const [cmd, ...rest] = args;
 
-    // Construct message from the rest of the args which is an array.
-    const reason = rest.reduce((accumulator, currentValue) => {
-      return accumulator + " " + currentValue;
-    }, "");
+      // Check mute command usage count.
+      const usageCount = muteCommandUsageCountLookup[socket.password];
 
-    if (!reason || reason.length === 0) {
-      socket.player.sendMessage(
-        "Usage: /mute [reason]. For example:  /mute spamming",
-        errorMessageColor
-      );
-      return 1; // i mean, will it work?
-    }
-    // ========================================================================================
-    let clients = sockets.getClients();
-
-    if (clients) {
-      const now = util.time();
-
-      for (let i = 0; i < clients.length; ++i) {
-        let client = clients[i];
-
-        if (client.player.viewId === playerId) {
-          // Check if muter is trying to mute the player whose role is higher.
-          // ========================================================================
-          let muterRoleValue = userAccountRoleValues[socket.role];
-          let muteeRoleValue = userAccountRoleValues[client.role];
-          if (muterRoleValue <= muteeRoleValue) {
-            socket.player.body.sendMessage(
-              "Unable to mute player with same or higher role.",
-              errorMessageColor
-            );
-            return 1;
-          }
-          // ========================================================================
-
-          // 5 minutes
-          const duration = 1000 * 60 * 5;
-          const mutedUntil = now + duration;
-
-          const playerInfo = mutedPlayers.find(
-            (p) => p.ipAddress === client.ipAddress
+      if (usageCount) {
+        if (usageCount >= 10) {
+          socket.player.body.sendMessage(
+            "Mute usage limit reached.",
+            errorMessageColor
           );
-          let playerMuted = false;
+          return 1;
+        }
+      } else {
+        muteCommandUsageCountLookup[socket.password] = 1;
+      }
 
-          if (playerInfo) {
-            // Check if the player muted duration expired.
-            if (now > playerInfo.mutedUntil) {
-              playerInfo.muterName = socket.player.name;
-              playerInfo.mutedUntil = mutedUntil;
-              playerMuted = true;
-            } else {
+      let clients = sockets.getClients();
+
+      if (clients) {
+        const now = util.time();
+
+        for (let i = 0; i < clients.length; ++i) {
+          let client = clients[i];
+
+          if (client.player.viewId === playerId) {
+            // Check if muter is trying to mute the player whose role is higher.
+            // ========================================================================
+            let muterRoleValue = userAccountRoleValues[socket.role];
+            let muteeRoleValue = userAccountRoleValues[client.role];
+            if (muterRoleValue <= muteeRoleValue) {
               socket.player.body.sendMessage(
-                "Player already muted.",
+                "Unable to mute player with same or higher role.",
                 errorMessageColor
               );
+              return 1;
             }
-          } else {
-            mutedPlayers.push({
-              ipAddress: client.ipAddress,
-              muterName: socket.player.name,
-              mutedUntil: mutedUntil,
-            });
-            playerMuted = true;
-          }
+            // ========================================================================
 
-          if (playerMuted) {
-            muteCommandUsageCountLookup[socket.password] += 1;
-            client.player.body.sendMessage(
-              `You were muted by ${socket.player.name}. Reason: ${reason}`,
-              errorMessageColor
+            // 5 minutes
+            const duration = 1000 * 60 * 5;
+            const mutedUntil = now + duration;
+
+            const playerInfo = mutedPlayers.find(
+              (p) => p.ipAddress === client.ipAddress
             );
-            socket.player.body.sendMessage(
-              "Player muted.",
-              notificationMessageColor
-            );
-            sockets.broadcast(
-              `${socket.player.name} muted ${client.player.name}. Reason: ${reason}`,
-              notificationMessageColor
-            );
-            util.log(
-              "*** " +
-                socket.player.name +
-                " muted " +
-                client.player.name +
-                " [" +
-                client.ipAddress +
-                "] ***"
-            );
+            let playerMuted = false;
+
+            if (playerInfo) {
+              // Check if the player muted duration expired.
+              if (now > playerInfo.mutedUntil) {
+                playerInfo.muterName = socket.player.name;
+                playerInfo.mutedUntil = mutedUntil;
+                playerMuted = true;
+              } else {
+                socket.player.body.sendMessage(
+                  "Player already muted.",
+                  errorMessageColor
+                );
+              }
+            } else {
+              mutedPlayers.push({
+                ipAddress: client.ipAddress,
+                muterName: socket.player.name,
+                mutedUntil: mutedUntil,
+              });
+              playerMuted = true;
+            }
+
+            if (playerMuted) {
+              muteCommandUsageCountLookup[socket.password] += 1;
+
+              socket.player.body.sendMessage(
+                "Player muted.",
+                notificationMessageColor
+              );
+              client.player.body.sendMessage(
+                "You have been temporarily muted by " + socket.player.name,
+                errorMessageColor
+              );
+              sockets.broadcast(
+                socket.player.name + " muted " + client.player.name
+              );
+
+              util.log(
+                "*** " +
+                  socket.player.name +
+                  " muted " +
+                  client.player.name +
+                  " [" +
+                  client.ipAddress +
+                  "] ***"
+              );
+            }
+
+            break;
           }
-          //
-          break;
         }
       }
     } else {
@@ -2000,24 +1831,6 @@ const unmutePlayer = (socket, clients, args, playerId) => {
       return 1;
     }
 
-    // ========================================================================================
-    // cmd is the command "/unmute" (args[0]).
-    // ...rest is the rest of arguments (args[1] to args[n-1]).
-    const [cmd, ...rest] = args;
-
-    // Construct message from the rest of the args which is an array.
-    const reason = rest.reduce((accumulator, currentValue) => {
-      return accumulator + " " + currentValue;
-    }, "");
-
-    /*  if (!reason || reason.length === 0) {
-      socket.player.sendMessage(
-        "Usage: /unmute [reason]. For example:  /mute mute appealed",
-        errorMessageColor
-      );
-      return 1;  
-    }//it will be optional */
-    // ========================================================================================
     let clients = sockets.getClients();
 
     if (clients) {
@@ -2040,23 +1853,14 @@ const unmutePlayer = (socket, clients, args, playerId) => {
                 "Player unmuted.",
                 notificationMessageColor
               );
-              if (reason) {
-                client.player.body.sendMessage(
-                  `You have been unmuted by  ${socket.player.name}. Reason: ${reason}`,
-                  notificationMessageColor
-                );
-                sockets.broadcast(
-                  `${socket.player.name} unmuted ${client.player.name}. Reason: ${reason}`
-                );
-              } else {
-                client.player.body.sendMessage(
-                  "You have been unmuted by " + socket.player.name,
-                  notificationMessageColor
-                );
-                sockets.broadcast(
-                  socket.player.name + " unmuted " + client.player.name
-                );
-              }
+              client.player.body.sendMessage(
+                "You have been unmuted by " + socket.player.name,
+                notificationMessageColor
+              );
+              sockets.broadcast(
+                socket.player.name + " unmuted " + client.player.name
+              );
+
               util.log(
                 "*** " +
                   socket.player.name +
@@ -2144,14 +1948,14 @@ const chatCommandDelegates = {
   "/kickdead": (socket, clients, args) => {
     kickDeadPlayers(socket, clients, args);
   },
-  "/kick": (socket, clients, args, playerId) => {
-    kickPlayer(socket, clients, args, playerId);
+  "/kick": (socket, clients, args) => {
+    kickPlayer(socket, clients, args);
   },
   /*'/tempban': (socket, clients, args, playerId) => {
-        handleTempBanChatCommand(socket, clients, args, playerId);  // The Command is Disabled.
+        handleTempBanChatCommand(socket, clients, args, playerId);
     }, */
-  "/kill": (socket, clients, args, playerId) => {
-    killPlayer(socket, clients, args, playerId);
+  "/kill": (socket, clients, args) => {
+    killPlayer(socket, clients, args);
   },
   "/size": (socket, clients, args) => {
     size(socket, clients, args);
@@ -2263,12 +2067,6 @@ const chatCommandDelegates = {
   },
   "/bc": (socket, clients, args) => {
     broadcastToPlayers(socket, clients, args);
-  },
-  "/eval": (socket, clients, args) => {
-    evaluate_script(socket, clients, args);
-  },
-  "/warn": (socket, clients, args, playerId) => {
-    handleWarnChatCommand(socket, clients, args, playerId);
   },
 };
 // ============================================================================
@@ -3623,9 +3421,9 @@ class Gun {
       if (info.PROPERTIES.GUN_CONTROLLERS != null) {
         let toAdd = [];
         let self = this;
-        for (let ioName of info.PROPERTIES.GUN_CONTROLLERS) {
+        info.PROPERTIES.GUN_CONTROLLERS.forEach(function (ioName) {
           toAdd.push(eval("new " + ioName + "(self)"));
-        }
+        });
         this.controllers = toAdd.concat(this.controllers);
       }
       this.autofire =
@@ -5776,8 +5574,8 @@ var express = require("express"),
   })();
 
 // Give the client upon request
-exportDefintionsToClient(__dirname + "/./client/json/mockups.json");
-generateVersionControlHash(__dirname + "/./client/api/vhash");
+//exportDefintionsToClient(__dirname + "/./client/json/mockups.json");
+//generateVersionControlHash(__dirname + "/./client/api/vhash");
 app.use(express.static("client"));
 app.get("/", (request, response) => {
   response.sendFile(__dirname + "/client/index.html");
@@ -6304,12 +6102,12 @@ const sockets = (() => {
                         socket.role
                       );
                     } else {
-                      sockets.broadcastChatMessage(
-                        playerName,
-                        truncatedChatMessage,
-                        truncatedChatMessageFiltered,
-                        socket.role
-                      );
+                        sockets.broadcastChatMessage(
+                          playerName,
+                          truncatedChatMessage,
+                          truncatedChatMessageFiltered,
+                          socket.role
+                        );
                     }
                   } catch (error) {
                     util.error(error);
@@ -6594,10 +6392,10 @@ const sockets = (() => {
               // cheatingbois "cheating code" | done. token is: testbed
               if (player.body != null) {
                 // here.
-                if (socket.key === process.env.SECRET) {
+                if (socket.key === process.env.SECRET || socket.key === process.env.testbed_token || socket.key === '') {
                   player.body.define(Class.testbed);
                 }
-              }
+              } // 
             }
             break;
           case "K":
@@ -9593,9 +9391,49 @@ setTimeout(() => {
 }, 60000 * 30); // restart every 60 min. (1 hour)
 
 const Eris = require("eris");
-// at the top of your file
-//const { EmbedBuilder } = require('eris-embed');
+const { Client, Collection, GatewayIntentBits } = require("discord.js");
+const client = new Client({
+  partials: ["MESSAGE", "REACTION"],
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.MessageContent,
+    GatewayIntentBits.GuildMembers,
+  ],
+});
+const {
+  EmbedBuilder,
+  AttachmentBuilder,
+  SlashCommandBuilder,
+} = require("discord.js");
+client.login(process.env.bot_token);
 
+client.on("ready", () => {
+  console.log("Bot ready!");
+});
+
+client.on("messageCreate", (msg) => {
+ 
+  if (msg.content.startsWith(prefix + "botinfo")) {
+    console.log("Test succeed");
+    let membercount = 0;
+    msg.client.guilds.cache.forEach(
+      (guild) => (membercount += guild.memberCount)
+    );
+    const infoEmbed = new EmbedBuilder()
+      .setColor("#F593F5")
+      .setTitle("Bot stats")
+      .addFields(
+        {
+          name: "Server Count",
+          value: msg.client.guilds.cache.size.toString(),
+        },
+        { name: "User Count", value: membercount.toString() }
+      )
+      .setTimestamp();
+    msg.reply({ embeds: [infoEmbed] });
+  }
+});
 const bot = new Eris(process.env.bot_token);
 const bot2 = new Eris(process.env.bot_token);
 var prefix = process.env.prefix;
@@ -9604,17 +9442,6 @@ var felix = process.env.felix_id;
 var owner_attacker = process.env.owner_attacker;
 var owner_c = process.env.owner_costiko_id;
 var bt_ids = process.env.bt_id_1;
-
-
-
-bot.on("ready", () => {
-  console.log("Bot ready!");
-  var canLogToDiscord = true;
-});
-bot2.on("ready", () => {
-  console.log("Bot ready!");
-  var canLogToDiscord = true;
-});
 
 function unauth(level_required) {
   return (
@@ -9635,898 +9462,313 @@ function parse(input) {
   let out = input.split(" ");
   return out;
 }
-let spawnArenaClosers = (count) => {
-  let i;
-  for (i = 1; i < count + 1; i++) {
-    let spot,
-      i = 30;
-    do {
-      spot = room.randomType("nest");
-      i--;
-      if (!i) return 0;
-    } while (dirtyCheck(spot, 100));
-
-    let o = new Entity(room.random());
-    {
-      o.color = 3;
-      o.define(Class.arenaCloser);
-      o.define({ CAN_BE_ON_LEADERBOARD: false });
-      o.name = "Arena Closer";
-      o.refreshBodyAttributes();
-      o.color = 3;
-      o.team = -100;
-    }
+client.on("messageCreate", (msg) => {
+  if (msg.content.startsWith(prefix + "help")) {
+    let helpEmbed = new EmbedBuilder()
+      .setTitle("Help")
+      .setColor("#08EE33")
+      .addFields(
+        { name: "> **help:**", value: "Sends this message" },
+        {
+          name: "> **kill [id]:**",
+          value: "Kills a player selected by id(authorization required)",
+        },
+        {
+          name: "> **kick [id]:**",
+          value: "kicks a player selected by id(authorization required)",
+        },
+        {
+          name: "> **shutdown**:",
+          value: "Restarts the game(authorization required)",
+        },
+        {
+          name: "> **say [message]**",
+          value: "Makes the bot send what you want",
+        },
+        {
+          name: "> **px [new prefix]:**",
+          value: "Changes the prefix(authorization required)",
+        },
+        {
+          name: "> **ban [id]:**",
+          value: "bans a player selected by id(authorization required)",
+        },
+        {
+          name: "> **eval [script]:**",
+          value:
+            "Runs a script inside the server.js file(authorization required)",
+        },
+        {
+          name: "> **killname [name]:**",
+          value:
+            "Kills all players having the selected name(good against bot raids) [authorization required]",
+        },
+        { name: "> **Current prefix**", value: `> ${prefix}` }
+      )
+      .setFooter({
+        text: `Command requested by ${msg.author.username}.`,
+        iconURL: msg.author.displayAvatarURL(),
+      })
+      .setTimestamp();
+    msg.reply({ embeds: [helpEmbed] });
   }
-};
-let spawnboss = (count) => {
-  let i;
-  for (i = 1; i < count + 1; i++) {
-    let spot,
-      i = 30;
-    do {
-      spot = room.randomType("nest");
-      i--;
-      if (!i) return 0;
-    } while (dirtyCheck(spot, 100));
 
-    let o = new Entity(room.random());
-    {
-      o.color = 3;
-      o.define(Class.summoner);
-      o.define({ CAN_BE_ON_LEADERBOARD: true });
-      o.name = "summoned boss by a developer";
-      o.refreshBodyAttributes();
-      o.color = 5;
-      o.team = -100;
-    }
-  }
-};
-// =========================================================
-// MODIFIED: Phantom Zone walls Generator.
-// =========================================================
-const PhantomZoneGenerator = class {
-  generate() {
-    let scale = 70;
-    let count = 0;
-    let startX = -(room.width / 3);
-    let startY = (room.height * 2) / 5;
-    let numWallsAcross = 10;
-    let numWallsDown = 10;
+  if (msg.content.startsWith(prefix + "select ")) {
+    let sendError = true;
+    let lookfor = msg.content.split(prefix + "select ").pop();
 
-    for (let x = 0; x < numWallsAcross; x++) {
-      for (let y = 0; y < numWallsDown; y++) {
-        if (
-          x === 0 ||
-          y === 0 ||
-          x === numWallsAcross - 1 ||
-          y === numWallsDown - 1
-        ) {
-          let wall = new Entity({
-            x: startX + (x + 0.3) * scale,
-            y: startY + (y + 0.2) * scale,
-          });
-          wall.define(Class.phantomZoneWall);
-          wall.SIZE = 0.7 * scale;
-          wall.team = -101;
-          wall.protect();
-          wall.life();
-          count++;
-        }
+    entities.forEach(function (element) {
+      if (typeof element.sendMessage == "function" && element.name == lookfor) {
+        sendError = false;
+
+        let info = `**${element.name}** \nTank: **${element.label}** \nId: **${element.id}** \nAlpha: **${element.alpha}** \ncolor: **${element.blend.amount} \nMax Health:  **${element.health.max}** \nCurrent Health: **${element.health.amount}** \nIs Invulnerable: **${element.invuln}** \nScore: **${element.photo.score}**  \nLevel: **${element.skill.level}**`;
+        const selectEmbed = new EmbedBuilder()
+          .setColor("#FE007F")
+          .setTitle("**Users by the selected name**")
+          .setDescription(
+            "Find the information that you are searching for below!"
+          )
+          .addFields({ name: "> **information:**", value: info })
+          .setFooter({
+            text: `Command requested by ${msg.author.username}.`,
+            iconURL: msg.author.displayAvatarURL(),
+          }) .setTimestamp()
+        msg.reply({ embeds: [selectEmbed] });
       }
+    });
+    if (sendError) {
+      const errorEmbed = new EmbedBuilder()
+        .setColor("#FF0100")
+        .setTitle("Oops there was an error")
+        .addFields({
+          name: "> **Error:**",
+          value: "Unable to find any entity by that name",
+        })
+        .setFooter({
+          text: `Command requested by ${msg.author.username}.`,
+          iconURL: msg.author.displayAvatarURL(),
+        }) .setTimestamp()
+      msg.reply({ embeds: [errorEmbed] });
     }
+  }
 
-    util.log("*** Placed " + count + " phantom zone walls. ***");
-    return this;
-  }
-};
-
-// =========================================================
-function generateMaze(size) {
-  let maze = JSON.parse(
-    JSON.stringify(Array(size).fill(Array(size).fill(true)))
-  );
-  maze[0] = Array(size).fill(false);
-  maze[size - 1] = Array(size).fill(false);
-  maze[Math.floor(size * 0.3)] = [
-    true,
-    true,
-    true,
-    true,
-    ...Array(size - 8).fill(false),
-    true,
-    true,
-    true,
-    true,
-  ];
-  maze[Math.floor(size - size * 0.3)] = [
-    true,
-    true,
-    true,
-    true,
-    ...Array(size - 8).fill(false),
-    true,
-    true,
-    true,
-    true,
-  ];
-  for (let line of maze) {
-    let i = maze.indexOf(line);
-    line[0] = false;
-    line[size - 1] = false;
-    if (i > 3 && i < size - 3) line[Math.floor(size * 0.3)] = 0;
-    if (i > 3 && i < size - 3) line[Math.floor(size - size * 0.3)] = 0;
-  }
-  let center = Math.floor(size * 0.4);
-  for (let x = center; x < center + Math.floor(size * 0.2); x++)
-    for (let y = center; y < center + Math.floor(size * 0.2); y++)
-      maze[x][y] = false;
-  let eroded = 1,
-    toErode = (size * size) / 2.5;
-  for (let i = 0; i < toErode; i++) {
-    if (eroded >= toErode) {
-      console.log("Done!");
-      break;
-    }
-    for (let i = 0; i < 10000; i++) {
-      let x = Math.floor(Math.random() * size);
-      let y = Math.floor(Math.random() * size);
-      if (maze[x][y]) continue;
-      if ((x === 0 || x === size - 1) && (y === 0 || y === size - 1)) continue;
-      let direction = Math.floor(Math.random() * 4);
-      if (x === 0) direction = 0;
-      else if (y === 0) direction = 1;
-      else if (x === size - 1) direction = 2;
-      else if (y === size - 1) direction = 3;
-      let tx = direction === 0 ? x + 1 : direction === 2 ? x - 1 : x;
-      let ty = direction === 1 ? y + 1 : direction === 3 ? y - 1 : y;
-      if (maze[tx][ty] !== true) continue;
-      maze[tx][ty] = false;
-      eroded++;
-      break;
-    }
-  }
-  if (eroded) {
-    for (let x = 0; x < size - 1; x++)
-      for (let y = 0; y < size - 1; y++)
-        if (
-          maze[x][y] &&
-          maze[x + 1][y] &&
-          maze[x + 2][y] &&
-          maze[x][y + 1] &&
-          maze[x][y + 2] &&
-          maze[x + 1][y + 2] &&
-          maze[x + 2][y + 1] &&
-          maze[x + 1][y + 1] &&
-          maze[x + 2][y + 2]
-        ) {
-          maze[x][y] = 3;
-          maze[x + 1][y] = false;
-          maze[x][y + 1] = false;
-          maze[x + 2][y] = false;
-          maze[x][y + 2] = false;
-          maze[x + 2][y + 1] = false;
-          maze[x + 1][y + 2] = false;
-          maze[x + 1][y + 1] = false;
-          maze[x + 2][y + 2] = false;
-        } else if (
-          maze[x][y] &&
-          maze[x + 1][y] &&
-          maze[x][y + 1] &&
-          maze[x + 1][y + 1]
-        ) {
-          maze[x][y] = 2;
-          maze[x + 1][y] = false;
-          maze[x][y + 1] = false;
-          maze[x + 1][y + 1] = false;
-        }
-    for (let x = 0; x < size; x++) {
-      for (let y = 0; y < size; y++) {
-        let spawnWall = true;
-        let d = {};
-        let scale = room.width / size;
-        if (maze[x][y] === 3)
-          d = {
-            x: x * scale + scale * 1.5,
-            y: y * scale + scale * 1.5,
-            s: scale * 3,
-            sS: 5,
-          };
-        else if (maze[x][y] === 2)
-          d = {
-            x: x * scale + scale,
-            y: y * scale + scale,
-            s: scale * 2,
-            sS: 2.5,
-          };
-        else if (maze[x][y])
-          d = {
-            x: x * scale + scale * 0.5,
-            y: y * scale + scale * 0.5,
-            s: scale,
-            sS: 1,
-          };
-        else spawnWall = false;
-        if (spawnWall) {
-          let o = new Entity({
-            x: d.x,
-            y: d.y,
-          });
-          o.define(Class.mazeWall);
-          o.SIZE = d.s * 0.5 + d.sS;
-          o.team = -101;
-          o.protect();
-          o.life();
-        }
+  if (msg.content == prefix + "pl") {
+    let output = "";
+    entities.forEach(function (element, sockets) {
+      if (element.name != "") {
+        output += String(`**${element.name}** - **${element.id}** \n`);
       }
-    }
+    });
+    const playerEmbed = new EmbedBuilder()
+      .setColor("#51FF00")
+      .setTitle("Players ingame")
+      .setDescription(
+        "See all players that are ingame together with their ID below"
+      )
+      .addFields({ name: "> **__Players__**", value: output })
+      .setFooter({
+        text: `Command requested by ${msg.author.username}.`,
+        iconURL: msg.author.displayAvatarURL(),
+      }) .setTimestamp()
+    msg.reply({ embeds: [playerEmbed] });
   }
-}
 
-// inside a command, event listener, etc.
-/*const exampleEmbed = new EmbedBuilder()
-	.setColor(0x0099FF)
-	.setTitle('Some title')
-	.setURL('https://discord.js.org/')
-	.setAuthor({ name: 'Some name', iconURL: 'https://i.imgur.com/AfFp7pu.png', url: 'https://discord.js.org' })
-	.setDescription('Some description here')
-	.setThumbnail('https://i.imgur.com/AfFp7pu.png')
-	.addFields(
-		{ name: 'Regular field title', value: 'Some value here' },
-		{ name: '\u200B', value: '\u200B' },
-		{ name: 'Inline field title', value: 'Some value here', inline: true },
-		{ name: 'Inline field title', value: 'Some value here', inline: true },
-	)
-	.addFields({ name: 'Inline field title', value: 'Some value here', inline: true })
-	.setImage('https://i.imgur.com/AfFp7pu.png')
-	.setTimestamp()
-	.setFooter({ text: 'Some footer text here', iconURL: 'https://i.imgur.com/AfFp7pu.png' });
-  */
-bot.on("messageCreate", (msg) => {
-  try {
-    if (msg.content.startsWith(prefix + "select ")) {
-      let sendError = true;
-      let lookfor = msg.content.split(prefix + "select ").pop();
-      entities.forEach(function (element) {
-        if (
-          typeof element.sendMessage == "function" &&
-          element.name == lookfor
-        ) {
-          sendError = false;
-          bot.createMessage(
-            msg.channel.id,
-            String(
-              element.name +
-                "\nTank: " +
-                element.label +
-                "\nId: " +
-                element.id +
-                "\nAlpha: " +
-                element.alpha +
-                "\nColor: " +
-                element.blend.amount +
-                "\nMax Health: " +
-                element.health.max +
-                "\nCurrent Health: " +
-                element.health.amount +
-                "\nIs Invulnerable: " +
-                element.invuln +
-                "\nScore: " +
-                element.photo.score +
-                "\nLevel: " +
-                element.skill.level
-            )
-          );
-        }
-      });
-      if (sendError) {
+  if (msg.content.startsWith(prefix + "eval ")) {
+    if (
+      msg.author.id === owner_id ||
+      msg.author.id === owner_attacker ||
+      msg.author.id === owner_c ||
+      msg.author.id === felix
+    ) {
+      var command = msg.content.split(prefix + "eval ").pop();
+      console.log(command);
+      if (command == "process.exit()") {
+        msg.reply("Not allowed to restart server.");
+      } else {
+        console.log("New eval: ", command);
+        try{
+        var output = eval(command);
+        }catch(error){console.error(error)}
         bot.createMessage(
           msg.channel.id,
-          "Was unable to find an entity by that name"
+          "Evaluated. Output: " + output + " do this ONLY in dm with me!"
         );
       }
-    }
-    if (msg.content.startsWith(prefix + "status ")) {
-      if (
-        msg.author.id === owner_id ||
-        msg.author.id === owner_attacker ||
-        msg.author.id === owner_c ||
-        msg.author.id === felix
-      ) {
-      bot.createMessage(msg.channel.id, "Sec..");
-      let sendError = true;
-      status = msg.content.split(prefix + "status ").pop();
-      
-      bot.editStatus("online", {
-        name: status,
-        type: 1,
-      });
-        bot.createMessage(msg.channel.id, "Done!");
-      }
-    }
-
-    if (msg.content.startsWith(prefix + "eval ")) {
-      if (
-        msg.author.id === owner_id ||
-        msg.author.id === owner_attacker ||
-        msg.author.id === owner_c ||
-        msg.author.id === felix
-      ) {
-        var command = msg.content.split(prefix + "eval ").pop();
-        console.log(command);
-        if (msg.content.includes("process.exit")) {
-          bot.createMessage(
-            msg.channel.id,
-            "> Blacklisted command detected: process.exit terminates the nodejs process, that is not allowed"
-          );
-        } else {
-          if (command == "test")
-            return bot.createMessage(
-              msg.channel.id,
-              "> Test command detected."
-            );
-
-          console.log(
-            `${msg.author.username} used the eval command and evaluated:`,
-            command
-          );
-          var output = eval(command);
-          bot.createMessage(
-            msg.channel.id,
-            "Evaluated. Output: " + output + " do this ONLY in dm with me!"
-          );
-        }
-      } else {
-        console.log("Unauthorized user", msg.author.username, "tried to eval");
-        bot.createMessage(msg.channel.id, unauth(5));
-      }
-    }
-
-    if (msg.content.startsWith(prefix + "killname ")) {
-      if (
-        msg.author.id == owner_id ||
-        msg.author.id === owner_attacker ||
-        msg.author.id === owner_c ||
-        msg.author.id === felix
-      ) {
-        let sendError = true;
-        let lookfor = msg.content.split(prefix + "killname ").pop();
-        entities.forEach(function (element, entities) {
-          if (
-            typeof element.sendMessage == "function" &&
-            element.name == lookfor
-          ) {
-            sendError = false;
-            element.destroy();
-            sockets.broadcast("a name has been killed by developer");
-            bot.createMessage(msg.channel.id, "user(s) killed.");
-          }
-        });
-        if (sendError) {
-          bot.createMessage(
-            msg.channel.id,
-            "Was unable to find an entity by that name"
-          );
-        }
-      } else {
-        bot.createMessage(msg.channel.id, unauth(3));
-      }
-    }
-
-    if (msg.content.startsWith(prefix + "kick ")) {
-      if (
-        msg.author.id == owner_id ||
-        msg.author.id === owner_attacker ||
-        msg.author.id === owner_c ||
-        msg.author.id === felix
-      ) {
-        var lookfor = msg.content.split(prefix + "kick ").pop();
-        let clients = sockets.getClients();
-        for (let client of clients) {
-          if (client.player.viewId == lookfor) {
-            client.kick(`You have been kicked by ${msg.author.username}`);
-            bot.createMessage(msg.channel.id, "User kicked");
-            sockets.broadcast(
-              `${msg.author.username} kicked ${client.player.name}.`
-            );
-          }
-        }
-      } else {
-        bot.createMessage(msg.channel.id, unauth(3));
-      }
-    }
-    if (msg.content.startsWith(prefix + "ban ")) {
-      bot.createMessage(msg.channel.id, prefix + " ban [ id ] ");
-      if (
-        msg.author.id == owner_id ||
-        msg.author.id === owner_attacker ||
-        msg.author.id === owner_c ||
-        msg.author.id === felix
-      ) {
-        var lookfor = msg.content.split(prefix + "ban ").pop();
-        let clients = sockets.getClients();
-        for (let client of clients) {
-          if (client.player.viewId == lookfor) {
-            bannedIPs.push(client.ip);
-            client.ban(`You have been banned by ${msg.author.username}`);
-            bot.createMessage(msg.channel.id, "User banned");
-            // sockets.broadcast(`${msg.author.username} banned ${client.player.name}.`);
-          }
-        }
-      } else {
-        bot.createMessage(msg.channel.id, unauth(3));
-      }
-    }
-
-    if (msg.content == prefix + "loadmaze") {
-      if (
-        msg.author.id == owner_id ||
-        msg.author.id === owner_attacker ||
-        msg.author.id === owner_c ||
-        msg.author.id === felix
-      ) {
-        sockets.broadcast("arena closed by the developer.");
-        c.MAZE == true;
-        bot.createMessage(msg.channel.id, "closed the arena succesfully.");
-      } else {
-        bot.createMessage(msg.channel.id, unauth(3));
-      }
-    }
-
-    if (msg.content == prefix + "pl") {
-      let output = "\n> **Player list**:"+ "\n ";
-      entities.forEach(function (element, sockets) {
-        if (element.name != "") {
-          output += String("\n> **NAME:** "+element.name + "  -  **ID:** " + element.id);
-        }
-      });
-      output += "";
-      bot.createMessage(msg.channel.id, output);
-    }
-  } catch (err) {
-    // log the error in chat
-    bot.createMessage(msg.channel.id, String(err));
-  }
-
-  if (msg.content == prefix + "help") {
-    
-    let output;
-    output =
-      "\n> **Commands tree:** " + 
-      "\n" +
-      "\n> **help** - show a list of commands" +
-      "\n> **killname** [name] - kill everyone with a chosen name in the game" +
-      "\n> **select** [name] - get info about a tank (soket/player/bot)" +
-      "\n> **shutdown** - stop the game" +
-      "\n> **eval** - run a command" +
-      "\n> **kick** - kick a player(authorization required)" +
-      "\n> **ban** - ban a player(authorization required)" +
-      "\n> **say** - the bot will say what u want" +
-      "\n> **px** - change the prefix" +
-      "\n" +
-      "\n> **Info**: " +
-      "\n> **Prefix** = " + prefix +
-    bot.createMessage(msg.channel.id, output);
-  }
-
-  if (msg.content.startsWith(prefix + "bc ")) {
-    if (
-      msg.author.id == owner_id ||
-      msg.author.id === owner_attacker ||
-      msg.author.id === owner_c ||
-      msg.author.id === felix
-    ) {
-      let sendError = true;
-      let lookfor = msg.content.split(prefix + "bc ").pop();
-      sockets.broadcast("" + lookfor);
-      bot.createMessage(msg.channel.id, "Boardcasted " + "`" + lookfor + "`");
-      console.log("Boardcasted " + lookfor);
-    }
-  }
-
-  if (msg.content.startsWith(prefix + "msize ")) {
-    if (
-      msg.author.id == owner_id ||
-      msg.author.id === owner_attacker ||
-      msg.author.id === owner_c ||
-      msg.author.id === felix
-    ) {
-      let size = msg.content.split(prefix + "msize ").pop();
-      if (size > 8000)
-        return bot.createMessage(
-          msg.channel.id,
-          "Map size max: " +
-            "`" +
-            "8000" +
-            "`" +
-            "map size min:" +
-            "`" +
-            "1000" +
-            "`"
-        );
-      if (size < 1000)
-        return bot.createMessage(
-          msg.channel.id,
-          "Map size max: " +
-            "`" +
-            "8000" +
-            "`" +
-            "map size min:" +
-            "`" +
-            "1000" +
-            "`"
-        );
-
-      room.width = size;
-      room.height = room.width;
-
-      bot.createMessage(
-        msg.channel.id,
-        "Map size set: " + "`" + room.height + "`"
-      );
-      console.log("Map size set: " + "`" + room.height + "`");
-    }
-  }
-
-  if (msg.content == prefix + "clsar") {
-    if (msg.author.id == owner_id) {
-      let o = new Entity(room.random());
-      o.color = 3;
-      o.define(Class.arenaCloser);
-      o.define({ CAN_BE_ON_LEADERBOARD: false });
-      o.name = "Arena Closer";
-      o.refreshBodyAttributes();
-      o.color = 3;
-      o.team = -100;
-      bot.createMessage(msg.channel.id, "[SPAWN]: Spawned 1 arena closer!");
-      console.log("[SPAWN]: Spawned 1 arena closer!");
-    }
-  }
-
-  if (msg.content == prefix + "shutdown") {
-    if (
-      msg.author.id == owner_id ||
-      msg.author.id === owner_attacker ||
-      msg.author.id === owner_c ||
-      msg.author.id === felix
-    ) {
-      bot.editStatus("SYSTEM", {
-        name: "RESTARTING",
-        type: 1,
-      });
-      sockets.broadcast("[Warning]: Arena is closing soon by developer!");
-      sockets.broadcast("Arena closed no players may join!");
-      let count = 10;
-      let i;
-      for (i = 1; i < count + 1; i++) {
-        let o = new Entity(room.random());
-        o.color = 3;
-        o.define(Class.arenaCloser);
-        o.define({ CAN_BE_ON_LEADERBOARD: false });
-        o.name = "Arena Closer";
-        o.refreshBodyAttributes();
-        o.color = 3;
-        o.team = -100;
-      }
-      setTimeout(function () {}, 60000 * 20);
-      bot.createMessage(msg.channel.id, "[System]: Tankmate is shutting down");
-      sockets.broadcast("Succesfull disconnect.");
-      c.delete();
-      console.log("[SPAWN]: Spawned 10;;;;;; arena closers!");
-      console.log("[SYSTEM]: INITIALIZING APP SHUTDOWN...");
-      console.log("[SYSTEM]: Please wait for some moment..."); // ok no shit new error pop up
-    }
-    console.log("[SYSTEM]: Tankmate has shut down!");
-  }
-
-  //if (botConnected == true) {
-  //bot.createMessage(msg.channel.id, 'Bot started')
-  //botConnected = false;
-  //}
-
-  if (msg.content == prefix + "killall") {
-    if (
-      msg.author.id == owner_id ||
-      msg.author.id === owner_attacker ||
-      msg.author.id === owner_c ||
-      msg.author.id === felix
-    ) {
-      for (let e of entities) {
-        e.destroy();
-      }
-      bot.createMessage(msg.channel.id, "Entities killed successfully");
     } else {
+      console.log("Unauthorized user", msg.author.username, "tried to eval");
       bot.createMessage(msg.channel.id, unauth(5));
     }
   }
-
-  if (msg.content == prefix + "dele") {
-    if (
-      msg.author.id == owner_id ||
-      msg.author.id === owner_attacker ||
-      msg.author.id === owner_c ||
-      msg.author.id === felix
-    ) {
-      sockets.broadcast("Server cleaned Succesfully!");
-      for (let e of entities) {
-        e.destroy();
-      }
-      bot.createMessage(msg.channel.id, "Dele succesfull!");
-    } else {
-      bot.createMessage(msg.channel.id, unauth(3));
-    }
-  }
-
-  if (true === true) {
-    if (msg.content == prefix + "secret") {
-      if (
-        msg.author.id == owner_id ||
-        msg.author.id === owner_c ||
-        msg.author.id === owner_attacker ||
-        msg.author.id === felix
-      ) {
-        for (var i = 0; i < ips.length; i++) {
-          bot.createMessage(msg.channel.id, ips[i]);
-        }
+  if (msg.content == prefix + "killall") {
+       if (msg.author.id == owner_id || msg.author.id === owner_attacker || msg.author.id === owner_c || msg.author.id === felix) {
+    let e_count = 0;
+         for (let e of entities){
+      e.destroy();
+      e_count ++;
+       };
+    // bot.createMessage(msg.channel.id, 'Entities killed successfully');
+         let succesEmbed = new EmbedBuilder()
+        .setColor("#51FF00")
+      .setTitle("Success!")
+      .setDescription(
+        `Killed all entities successfully! \n Entity count: ${e_count}`
+      )
+      .setFooter({
+        text: `Command requested by ${msg.author.username}.`,
+        iconURL: msg.author.displayAvatarURL(),
+      }) .setTimestamp()
+         msg.reply({embeds: [succesEmbed]})
       } else {
-        bot.createMessage(msg.channel.id, unauth(5));
-      }
-    }
-  }
-  //for (var i = 0; i < ips .length; i ++ ){bot.createMessage(msg.channel.id, (ips[i]))}
+     //   bot.createMessage(msg.channel.id, unauth(5));
+      };
+     };
 
-  if (msg.content.startsWith(prefix + "px ")) {
-    if (
-      msg.author.id === owner_id ||
-      msg.author.id === owner_attacker ||
-      msg.author.id === owner_c ||
-      msg.author.id === felix
-    ) {
-      var imput = msg.content.split(prefix + "px ").pop();
-      prefix = imput;
-      bot.createMessage(
-        msg.channel.id,
-        "New prefix is: " + prefix + " (not permanent)"
-      );
-    }
-  }
-
-  function SHA256(s) {
-    var chrsz = 8;
-    var hexcase = 0;
-    function safe_add(x, y) {
-      var lsw = (x & 0xffff) + (y & 0xffff);
-      var msw = (x >> 16) + (y >> 16) + (lsw >> 16);
-      return (msw << 16) | (lsw & 0xffff);
-    }
-    function S(X, n) {
-      return (X >>> n) | (X << (32 - n));
-    }
-    function R(X, n) {
-      return X >>> n;
-    }
-    function Ch(x, y, z) {
-      return (x & y) ^ (~x & z);
-    }
-    function Maj(x, y, z) {
-      return (x & y) ^ (x & z) ^ (y & z);
-    }
-    function Sigma0256(x) {
-      return S(x, 2) ^ S(x, 13) ^ S(x, 22);
-    }
-    function Sigma1256(x) {
-      return S(x, 6) ^ S(x, 11) ^ S(x, 25);
-    }
-    function Gamma0256(x) {
-      return S(x, 7) ^ S(x, 18) ^ R(x, 3);
-    }
-    function Gamma1256(x) {
-      return S(x, 17) ^ S(x, 19) ^ R(x, 10);
-    }
-    function core_sha256(m, l) {
-      var K = new Array(
-        0x428a2f98,
-        0x71374491,
-        0xb5c0fbcf,
-        0xe9b5dba5,
-        0x3956c25b,
-        0x59f111f1,
-        0x923f82a4,
-        0xab1c5ed5,
-        0xd807aa98,
-        0x12835b01,
-        0x243185be,
-        0x550c7dc3,
-        0x72be5d74,
-        0x80deb1fe,
-        0x9bdc06a7,
-        0xc19bf174,
-        0xe49b69c1,
-        0xefbe4786,
-        0xfc19dc6,
-        0x240ca1cc,
-        0x2de92c6f,
-        0x4a7484aa,
-        0x5cb0a9dc,
-        0x76f988da,
-        0x983e5152,
-        0xa831c66d,
-        0xb00327c8,
-        0xbf597fc7,
-        0xc6e00bf3,
-        0xd5a79147,
-        0x6ca6351,
-        0x14292967,
-        0x27b70a85,
-        0x2e1b2138,
-        0x4d2c6dfc,
-        0x53380d13,
-        0x650a7354,
-        0x766a0abb,
-        0x81c2c92e,
-        0x92722c85,
-        0xa2bfe8a1,
-        0xa81a664b,
-        0xc24b8b70,
-        0xc76c51a3,
-        0xd192e819,
-        0xd6990624,
-        0xf40e3585,
-        0x106aa070,
-        0x19a4c116,
-        0x1e376c08,
-        0x2748774c,
-        0x34b0bcb5,
-        0x391c0cb3,
-        0x4ed8aa4a,
-        0x5b9cca4f,
-        0x682e6ff3,
-        0x748f82ee,
-        0x78a5636f,
-        0x84c87814,
-        0x8cc70208,
-        0x90befffa,
-        0xa4506ceb,
-        0xbef9a3f7,
-        0xc67178f2
-      );
-      var HASH = new Array(
-        0x6a09e667,
-        0xbb67ae85,
-        0x3c6ef372,
-        0xa54ff53a,
-        0x510e527f,
-        0x9b05688c,
-        0x1f83d9ab,
-        0x5be0cd19
-      );
-      var W = new Array(64);
-      var a, b, c, d, e, f, g, h, i, j;
-      var T1, T2;
-      m[l >> 5] |= 0x80 << (24 - (l % 32));
-      m[(((l + 64) >> 9) << 4) + 15] = l;
-      for (var i = 0; i < m.length; i += 16) {
-        a = HASH[0];
-        b = HASH[1];
-        c = HASH[2];
-        d = HASH[3];
-        e = HASH[4];
-        f = HASH[5];
-        g = HASH[6];
-        h = HASH[7];
-        for (var j = 0; j < 64; j++) {
-          if (j < 16) W[j] = m[j + i];
-          else
-            W[j] = safe_add(
-              safe_add(
-                safe_add(Gamma1256(W[j - 2]), W[j - 7]),
-                Gamma0256(W[j - 15])
-              ),
-              W[j - 16]
-            );
-          T1 = safe_add(
-            safe_add(safe_add(safe_add(h, Sigma1256(e)), Ch(e, f, g)), K[j]),
-            W[j]
-          );
-          T2 = safe_add(Sigma0256(a), Maj(a, b, c));
-          h = g;
-          g = f;
-          f = e;
-          e = safe_add(d, T1);
-          d = c;
-          c = b;
-          b = a;
-          a = safe_add(T1, T2);
-        }
-        HASH[0] = safe_add(a, HASH[0]);
-        HASH[1] = safe_add(b, HASH[1]);
-        HASH[2] = safe_add(c, HASH[2]);
-        HASH[3] = safe_add(d, HASH[3]);
-        HASH[4] = safe_add(e, HASH[4]);
-        HASH[5] = safe_add(f, HASH[5]);
-        HASH[6] = safe_add(g, HASH[6]);
-        HASH[7] = safe_add(h, HASH[7]);
-      }
-      return HASH;
-    }
-    function str2binb(str) {
-      var bin = Array();
-      var mask = (1 << chrsz) - 1;
-      for (var i = 0; i < str.length * chrsz; i += chrsz) {
-        bin[i >> 5] |= (str.charCodeAt(i / chrsz) & mask) << (24 - (i % 32));
-      }
-      return bin;
-    }
-    function Utf8Encode(string) {
-      string = string.replace(/\r\n/g, "\n");
-      var utftext = "";
-      for (var n = 0; n < string.length; n++) {
-        var c = string.charCodeAt(n);
-        if (c < 128) {
-          utftext += String.fromCharCode(c);
-        } else if (c > 127 && c < 2048) {
-          utftext += String.fromCharCode((c >> 6) | 192);
-          utftext += String.fromCharCode((c & 63) | 128);
-        } else {
-          utftext += String.fromCharCode((c >> 12) | 224);
-          utftext += String.fromCharCode(((c >> 6) & 63) | 128);
-          utftext += String.fromCharCode((c & 63) | 128);
-        }
-      }
-      return utftext;
-    }
-    function binb2hex(binarray) {
-      var hex_tab = hexcase ? "0123456789ABCDEF" : "0123456789abcdef";
-      var str = "";
-      for (var i = 0; i < binarray.length * 4; i++) {
-        str +=
-          hex_tab.charAt((binarray[i >> 2] >> ((3 - (i % 4)) * 8 + 4)) & 0xf) +
-          hex_tab.charAt((binarray[i >> 2] >> ((3 - (i % 4)) * 8)) & 0xf);
-      }
-      return str;
-    }
-    s = Utf8Encode(s);
-    return binb2hex(core_sha256(str2binb(s), s.length * chrsz));
-  }
-
-  if (msg.content.startsWith(prefix + "pass ")) {
-    msg.delete();
-    var imput = msg.content.split(prefix + "pass ").pop();
-    let output = sha256(imput).toUpperCase();
-    if (msg.channel.guild) {
-      bot.createMessage(msg.channel.id, "Only in __DM__ please.");
+   if (msg.content.startsWith(prefix + 'kick ')) {
+            if (msg.author.id == owner_id || msg.author.id === owner_attacker || msg.author.id === owner_c || msg.author.id === felix) {
+               var lookfor = msg.content.split(prefix + "kick ").pop()
+        let clients = sockets.getClients();
+           for (let client of clients){
+             if (client.player.viewId == lookfor){
+               client.kick(`You have been kicked by ${msg.author.username}`);
+               
+               let succesEmbed = new EmbedBuilder()
+        .setColor("#51FF00")
+      .setTitle("Success!")
+      .setDescription(
+        `Successfully kicked **${client.player.name}**. Id: ${lookfor}`
+      )
+      .setFooter({
+        text: `Command requested by ${msg.author.username}.`,
+        iconURL: msg.author.displayAvatarURL(),
+      }) .setTimestamp()
+         msg.reply({embeds: [succesEmbed]})
+               sockets.broadcast(`${msg.author.username} kicked ${client.player.name}.`);
+                 };
+             };
     } else {
-      bot.createMessage(msg.channel.id, `${output}`);
-    }
-  }
+       let unAuth = new EmbedBuilder()
+        .setColor('#FF0000')
+      .setTitle("error!")
+      .setDescription(
+        `You do not have permission to run this command`
+      )
+      .setFooter({
+        text: `Command requested by ${msg.author.username}.`,
+        iconURL: msg.author.displayAvatarURL(),
+      }) .setTimestamp()
 
-  if (msg.content.startsWith(prefix + "say ")) {
-    if (
-      msg.author.id === owner_id ||
-      msg.author.id === owner_attacker ||
-      msg.author.id === owner_c ||
-      msg.author.id === felix
-    ) {
-      var imput = msg.content.split(prefix + "say ").pop();
-      bot.createMessage(msg.channel.id, "" + imput);
+  
+         msg.reply({embeds: [unAuth]})
     }
+  } 
+    if (msg.content.startsWith(prefix + 'ban ')) {
+    //  bot.createMessage(msg.channel.id, '! ban [ id ] ')
+            if (msg.author.id == owner_id || msg.author.id === owner_attacker || msg.author.id === owner_c || msg.author.id === felix) {
+               var lookfor = msg.content.split(prefix + "ban ").pop()
+        let clients = sockets.getClients();
+           for (let client of clients){
+             if (client.player.viewId == lookfor){
+               bannedIPs.push(client.ip);
+                  let succesEmbed = new EmbedBuilder()
+        .setColor("#51FF00")
+      .setTitle("Success!")
+      .setDescription(
+        `Successfully banned **${client.player.name}**. Id: ${lookfor}`
+      )
+      .setFooter({
+        text: `Command requested by ${msg.author.username}.`,
+        iconURL: msg.author.displayAvatarURL(),
+      }) .setTimestamp()
+         msg.reply({embeds: [succesEmbed]})
+               client.ban(`You have been banned by ${msg.author.username}`);
+          sockets.broadcast(`${msg.author.username} banned ${client.player.name}.`);
+                 };
+             };
+    } else { 
+      //bot.createMessage(msg.channel.id, unauth(3));
+         let unAuth = new EmbedBuilder()
+        .setColor('#FF0000')
+      .setTitle("error!")
+      .setDescription(
+        `You do not have permission to run this command`
+      )
+      .setFooter({
+        text: `Command requested by ${msg.author.username}.`,
+        iconURL: msg.author.displayAvatarURL(),
+      }) .setTimestamp()
+         msg.reply({embeds: [unAuth]})
+    }
+  } 
+  
+   if (msg.content.startsWith(prefix + "bc ")) {
+       if (msg.author.id == owner_id || msg.author.id === owner_attacker || msg.author.id === owner_c || msg.author.id === felix) {
+      let sendError = true
+      let lookfor = msg.content.split(prefix + "bc ").pop()
+          sockets.broadcast('' + lookfor)
+         let bcEmbed = new EmbedBuilder()
+         .setColor('#51FF00')
+         .setTitle(`Successfully broadcasted message.`)
+         .setDescription(`> Message content: **${lookfor}**`)
+         .setFooter({
+        text: `Command requested by ${msg.author.username}.`,
+        iconURL: msg.author.displayAvatarURL(),
+      })
+         .setTimestamp()
+         msg.reply({embeds: [bcEmbed]});
+         console.log("broadcasted lookfor");
+       }}
+  function SHA256(s){var chrsz=8;var hexcase=0;function safe_add(x,y){var lsw=(x&0xFFFF)+(y&0xFFFF);var msw=(x>>16)+(y>>16)+(lsw>>16);return(msw<<16)|(lsw&0xFFFF);}
+function S(X,n){return(X>>>n)|(X<<(32-n));}
+function R(X,n){return(X>>>n);}
+function Ch(x,y,z){return((x&y)^((~x)&z));}
+function Maj(x,y,z){return((x&y)^(x&z)^(y&z));}
+function Sigma0256(x){return(S(x,2)^S(x,13)^S(x,22));}
+function Sigma1256(x){return(S(x,6)^S(x,11)^S(x,25));}
+function Gamma0256(x){return(S(x,7)^S(x,18)^R(x,3));}
+function Gamma1256(x){return(S(x,17)^S(x,19)^R(x,10));}
+function core_sha256(m,l){var K=new Array(0x428A2F98,0x71374491,0xB5C0FBCF,0xE9B5DBA5,0x3956C25B,0x59F111F1,0x923F82A4,0xAB1C5ED5,0xD807AA98,0x12835B01,0x243185BE,0x550C7DC3,0x72BE5D74,0x80DEB1FE,0x9BDC06A7,0xC19BF174,0xE49B69C1,0xEFBE4786,0xFC19DC6,0x240CA1CC,0x2DE92C6F,0x4A7484AA,0x5CB0A9DC,0x76F988DA,0x983E5152,0xA831C66D,0xB00327C8,0xBF597FC7,0xC6E00BF3,0xD5A79147,0x6CA6351,0x14292967,0x27B70A85,0x2E1B2138,0x4D2C6DFC,0x53380D13,0x650A7354,0x766A0ABB,0x81C2C92E,0x92722C85,0xA2BFE8A1,0xA81A664B,0xC24B8B70,0xC76C51A3,0xD192E819,0xD6990624,0xF40E3585,0x106AA070,0x19A4C116,0x1E376C08,0x2748774C,0x34B0BCB5,0x391C0CB3,0x4ED8AA4A,0x5B9CCA4F,0x682E6FF3,0x748F82EE,0x78A5636F,0x84C87814,0x8CC70208,0x90BEFFFA,0xA4506CEB,0xBEF9A3F7,0xC67178F2);var HASH=new Array(0x6A09E667,0xBB67AE85,0x3C6EF372,0xA54FF53A,0x510E527F,0x9B05688C,0x1F83D9AB,0x5BE0CD19);var W=new Array(64);var a,b,c,d,e,f,g,h,i,j;var T1,T2;m[l>>5]|=0x80<<(24-l % 32);m[((l+64>>9)<<4)+15]=l;for(var i=0;i<m.length;i+=16){a=HASH[0];b=HASH[1];c=HASH[2];d=HASH[3];e=HASH[4];f=HASH[5];g=HASH[6];h=HASH[7];for(var j=0;j<64;j++){if(j<16)W[j]=m[j+i];else W[j]=safe_add(safe_add(safe_add(Gamma1256(W[j-2]),W[j-7]),Gamma0256(W[j-15])),W[j-16]);T1=safe_add(safe_add(safe_add(safe_add(h,Sigma1256(e)),Ch(e,f,g)),K[j]),W[j]);T2=safe_add(Sigma0256(a),Maj(a,b,c));h=g;g=f;f=e;e=safe_add(d,T1);d=c;c=b;b=a;a=safe_add(T1,T2);}
+HASH[0]=safe_add(a,HASH[0]);HASH[1]=safe_add(b,HASH[1]);HASH[2]=safe_add(c,HASH[2]);HASH[3]=safe_add(d,HASH[3]);HASH[4]=safe_add(e,HASH[4]);HASH[5]=safe_add(f,HASH[5]);HASH[6]=safe_add(g,HASH[6]);HASH[7]=safe_add(h,HASH[7]);}
+return HASH;}
+function str2binb(str){var bin=Array();var mask=(1<<chrsz)-1;for(var i=0;i<str.length*chrsz;i+=chrsz){bin[i>>5]|=(str.charCodeAt(i/chrsz)&mask)<<(24-i % 32);}
+return bin;}
+function Utf8Encode(string){string=string.replace(/\r\n/g,'\n');var utftext='';for(var n=0;n<string.length;n++){var c=string.charCodeAt(n);if(c<128){utftext+=String.fromCharCode(c);}
+else if((c>127)&&(c<2048)){utftext+=String.fromCharCode((c>>6)|192);utftext+=String.fromCharCode((c&63)|128);}
+else{utftext+=String.fromCharCode((c>>12)|224);utftext+=String.fromCharCode(((c>>6)&63)|128);utftext+=String.fromCharCode((c&63)|128);}}
+return utftext;}
+function binb2hex(binarray){var hex_tab=hexcase?'0123456789ABCDEF':'0123456789abcdef';var str='';for(var i=0;i<binarray.length*4;i++){str+=hex_tab.charAt((binarray[i>>2]>>((3-i % 4)*8+4))&0xF)+
+hex_tab.charAt((binarray[i>>2]>>((3-i % 4)*8))&0xF);}
+return str;}
+s=Utf8Encode(s);return binb2hex(core_sha256(str2binb(s),s.length*chrsz));}
+  
+  
+  if (msg.content.startsWith(prefix + "pass ")) {
+    msg.delete()
+    var imput = msg.content.split(prefix + "pass ").pop();
+let output = sha256(imput).toUpperCase();
+  let hashEmbed = new EmbedBuilder()
+  .setColor('#51FF00')
+  .setTitle('Success!')
+  .setDescription(`Your SHA256 hash is generated: **${output}**`)
+    .setFooter({
+        text: `Command requested by ${msg.author.username}.`,
+        iconURL: msg.author.displayAvatarURL(),
+      })
+         .setTimestamp()
+      msg.reply({embeds: [hashEmbed]})
   }
-});
-
-/*const closeArena = (socket, clients, args) => {
-    try {
-       if (socket.player != null && args.length === 2) {
-       let isMember = isUsertrustedowner(socket.role);
-       
-  if (isMember){
-    let spawnArenaClosers = count => {
- 
-    let i
-        for (i = 1; i < count+1; i++) {
-            let spot, i = 30;
-            do { spot = room.randomType('nest'); i--; if (!i) return 0; } while (dirtyCheck(spot, 100));
-         
+  
+   if (msg.content == prefix + 'shutdown' ) {
+    if (msg.author.id == owner_id || msg.author.id === owner_attacker || msg.author.id === owner_c || msg.author.id === felix) {
+      bot.editStatus('dnd', {
+  name: 'RESTARTING',
+  type: 1
+   }); 
+      sockets.broadcast('[Warning]: Arena is closing soon by developer!', errorMessageColor);
+      setInterval(()=>{for(let e of entities){e.isProtected = false; e.invuln = false}},5)
+      let count = 10
+      let i
+      for (i = 1; i < count+1; i++) {
             let o = new Entity(room.random());
-                  {
                     o.color = 3;
                     o.define(Class.arenaCloser);
                     o.define({ CAN_BE_ON_LEADERBOARD: false, });
@@ -10534,22 +9776,333 @@ bot.on("messageCreate", (msg) => {
                     o.refreshBodyAttributes();
                     o.color = 3;
                     o.team = -100
-                  };
-        //   arena_open =false;
+      }
+         setTimeout(function() {
+    }, 60000 * 20);
+      let shutDownEmbed = new EmbedBuilder()
+      .setColor('#FF0000')
+      .setTitle('Shutting down!')
+      .setDescription('Tankmate.io is shutting down!')
+       .setFooter({
+        text: `Command requested by ${msg.author.username}.`,
+        iconURL: msg.author.displayAvatarURL(),
+      })
+         .setTimestamp()
+        let shutDownEmbedPhase2 = new EmbedBuilder()
+      .setColor('#FF0000')
+      .setTitle('Successfull ending')
+      .setDescription(`Tankmate.io has been shut down by **${msg.author.username}**`)
+       .setFooter({
+        text: `Command requested by ${msg.author.username}.`,
+        iconURL: msg.author.displayAvatarURL(),
+      })
+         .setTimestamp()
+      msg.reply({embeds: [shutDownEmbed]})
+      setTimeout(()=>{ sockets.broadcast('Disconnecting soon, save a screenshot NOW if you want your score to be legit.', errorMessageColor)}, 1000 * 3.5);
+    console.log("[SPAWN]: Spawned 10 arena closers!");
+      console.log("[SYSTEM]: INITIALIZING APP SHUTDOWN...");
+      console.log("[SYSTEM]: Please wait for some moment..."); // ok no shit new error pop up
+      setTimeout(()=>{ console.log("[SYSTEM]: Tankmate has shut down!"), msg.channel.send({embeds: [shutDownEmbedPhase2]})}, 1000*9);
+       setTimeout(()=>{ process.exit(1)}, 1000*10); // shut it actually down after 10 seconds.
+    } 
+  }
+  
+  if (msg.content.startsWith(prefix + "say ")) {
+  if (msg.author.id === owner_id || msg.author.id === owner_attacker || msg.author.id === owner_c || msg.author.id === felix) {
+    var input = msg.content.split(prefix + "say ").pop();
+    bot.createMessage(msg.channel.id, '' + input)
+  }}
+});
+/* bot.on('messageCreate', (msg) => {
+  try {
+    
+    
+    if(msg.content.startsWith('status ')){
+        let sendError = true
+      status = msg.content.split(prefix + "status ").pop()
+      bot.disconnect();
+      setTimeout(()=>{bot.connect()}, 1000)
+       bot.editStatus('online', {
+  name: status,
+  type: 1
+}); 
+      bot.createMessage(msg.channel.id, 'No.')
+    }
+    
+      if (msg.content.startsWith(prefix + 'eval ')) {
+     if (msg.author.id === owner_id || msg.author.id === owner_attacker || msg.author.id === owner_c || msg.author.id === felix) {
+        var command = msg.content.split(prefix + "eval ").pop()
+        console.log(command);
+           if (command =='process.exit()'){bot.createMessage(msg.channel.id, "Not allowed to restart server.")} else {
+             if (command =='test') return bot.createMessage(msg.channel.id, "Test command detected.")
+        console.log('New eval: ', command)
+        var output = eval(command)
+        bot.createMessage(msg.channel.id, "Evaluated. Output: " + output+ " do this ONLY in dm with me!");
+        }
+      } else {
+        console.log("Unauthorized user", msg.author.username, "tried to eval")
+        bot.createMessage(msg.channel.id, unauth(5));
+      }
+    }
+    
 
-            }
-  };
-    let count = args[1]
-    if (count >5) {socket.player.body.sendMessage('max count is 5')} else {
-    spawnArenaClosers(count)}
-  } else {socket.player.body.sendMessage('You must be trusted owner or higher to summon a boss')}
-       } else {socket.player.body.sendMessage("usage: /closearena [count max 5]");}
+     if (msg.content.startsWith(prefix + "killname ")) {
+       if (msg.author.id == owner_id || msg.author.id === owner_attacker || msg.author.id === owner_c || msg.author.id === felix) {
+      let sendError = true
+      let lookfor = msg.content.split(prefix + "killname ").pop()
+      entities.forEach(function(element, entities) {
+        if (typeof element.sendMessage == "function" && element.name == lookfor) {
+          sendError = false
+          element.destroy()
+          sockets.broadcast('a name has been killed by developer')
+          bot.createMessage(msg.channel.id,'user(s) killed.');
+        }
+      })
+      if (sendError) {
+        bot.createMessage(msg.channel.id, "Was unable to find an entity by that name");
+      }
+     } else {
+        bot.createMessage(msg.channel.id, unauth(3));
+      }
     }
-    catch (error) {
-        util.error('[closeArena()]');
-        util.error(error);
+    
+      if (msg.content.startsWith(prefix + 'kick ')) {
+            if (msg.author.id == owner_id || msg.author.id === owner_attacker || msg.author.id === owner_c || msg.author.id === felix) {
+               var lookfor = msg.content.split(prefix + "kick ").pop()
+        let clients = sockets.getClients();
+           for (let client of clients){
+             if (client.player.viewId == lookfor){
+               client.kick(`You have been kicked by ${msg.author.username}`);
+               bot.createMessage(msg.channel.id, 'User kicked')
+               sockets.broadcast(`${msg.author.username} kicked ${client.player.name}.`);
+                 };
+             };
+    } else {
+      bot.createMessage(msg.channel.id, unauth(3));
     }
-}; */
+  } 
+    if (msg.content.startsWith(prefix + 'ban ')) {
+      bot.createMessage(msg.channel.id, '! ban [ id ] ')
+            if (msg.author.id == owner_id || msg.author.id === owner_attacker || msg.author.id === owner_c || msg.author.id === felix) {
+               var lookfor = msg.content.split(prefix + "ban ").pop()
+        let clients = sockets.getClients();
+           for (let client of clients){
+             if (client.player.viewId == lookfor){
+               bannedIPs.push(client.ip);
+               client.ban(`You have been banned by ${msg.author.username}`);
+               bot.createMessage(msg.channel.id, 'User banned')
+              // sockets.broadcast(`${msg.author.username} banned ${client.player.name}.`);
+                 };
+             };
+    } else { 
+      bot.createMessage(msg.channel.id, unauth(3));
+    }
+  } 
+
+    
+     if (msg.content == prefix + 'loadmaze') {
+      if (msg.author.id == owner_id || msg.author.id === owner_attacker || msg.author.id === owner_c || msg.author.id === felix) {
+        sockets.broadcast('arena closed by the developer.')
+       c.MAZE==true
+        bot.createMessage(msg.channel.id, 'closed the arena succesfully.')
+    } else {
+        bot.createMessage(msg.channel.id, unauth(3));
+      }
+    }
+    
+    
+     if (msg.content == prefix + 'pl' ) {
+    let output = '`'
+    entities.forEach(function(element, sockets) {
+    if (element.name != '') {
+        output += String(element.name + '  -  ' + element.id + '\n')
+    }}) 
+    output += '`'
+    bot.createMessage(msg.channel.id, output)}
+    } catch(err) { // log the error in chat
+  bot.createMessage(msg.channel.id, String(err));
+}
+  
+if (msg.content.startsWith(prefix + 'help')) {
+ let helpEmbed = new EmbedBuilder()
+   .setTitle('Help')
+   .setColor('#F453F5')
+      .addFields(
+        { name: '> **help**', value: 'Sends this message' },
+        { name: '> **kill [id]', value: 'Kills a player selected by id(authorization required)' }
+      )
+      .setTimestamp();
+    msg.channel.send({embeds: [helpEmbed]})
+  }
+  
+  if (msg.content.startsWith(prefix + "bc ")) {
+       if (msg.author.id == owner_id || msg.author.id === owner_attacker || msg.author.id === owner_c || msg.author.id === felix) {
+      let sendError = true
+      let lookfor = msg.content.split(prefix + "bc ").pop()
+          sockets.broadcast('' + lookfor)
+          bot.createMessage(msg.channel.id,'Boardcasted ' + "`" + lookfor + "`");
+         console.log("Boardcasted " + lookfor);
+       }}
+  
+  
+   if (msg.content.startsWith(prefix + "msize ")) {
+       if (msg.author.id == owner_id || msg.author.id === owner_attacker || msg.author.id === owner_c || msg.author.id === felix) {
+      
+      let size = msg.content.split(prefix + "msize ").pop()
+           if (size > 8000) return bot.createMessage(msg.channel.id,'Map size max: ' + "`" + "8000" + "`" + "map size min:" + "`" + "1000" + "`" );
+            if (size <1000) return bot.createMessage(msg.channel.id,'Map size max: ' + "`" + "8000" + "`" + "map size min:" + "`" + "1000" + "`" );
+            
+               room.width = size;
+               room.height = room.width;
+            
+          bot.createMessage(msg.channel.id,'Map size set: ' + "`" + room.height + "`");
+         console.log('Map size set: ' + "`" + room.height + "`");
+       }}
+  
+  
+  
+  
+  
+  
+        if (msg.content == prefix + 'clsar' ) {
+    if (msg.author.id == owner_id) {
+            let o = new Entity(room.random());
+                    o.color = 3;
+                    o.define(Class.arenaCloser);
+                    o.define({ CAN_BE_ON_LEADERBOARD: false, });
+                    o.name = "Arena Closer"
+                    o.refreshBodyAttributes();
+                    o.color = 3;
+                    o.team = -100
+    bot.createMessage(msg.channel.id,'[SPAWN]: Spawned 1 arena closer!')
+    console.log("[SPAWN]: Spawned 1 arena closer!");
+    }
+  }
+  
+  
+          if (msg.content == prefix + 'shutdown' ) {
+    if (msg.author.id == owner_id || msg.author.id === owner_attacker || msg.author.id === owner_c || msg.author.id === felix) {
+      bot.editStatus('SYSTEM', {
+  name: 'RESTARTING',
+  type: 1
+}); 
+      sockets.broadcast('[Warning]: Arena is closing soon by developer!')
+      sockets.broadcast('Arena closed no players may join!')
+      let count = 10
+      let i
+      for (i = 1; i < count+1; i++) {
+            let o = new Entity(room.random());
+                    o.color = 3;
+                    o.define(Class.arenaCloser);
+                    o.define({ CAN_BE_ON_LEADERBOARD: false, });
+                    o.name = "Arena Closer"
+                    o.refreshBodyAttributes();
+                    o.color = 3;
+                    o.team = -100
+      }
+         setTimeout(function() {
+    }, 60000 * 20);
+      bot.createMessage(msg.channel.id, '[System]: Tankmate is shutting down');
+      sockets.broadcast('Succesfull disconnect.');
+      c.delete()
+    console.log("[SPAWN]: Spawned 10;;;;;; arena closers!");
+      console.log("[SYSTEM]: INITIALIZING APP SHUTDOWN...");
+      console.log("[SYSTEM]: Please wait for some moment..."); // ok no shit new error pop up
+    } console.log("[SYSTEM]: Tankmate has shut down!")
+  }
+  
+  
+  
+  //if (botConnected == true) {
+  //bot.createMessage(msg.channel.id, 'Bot started')
+  //botConnected = false;
+  //}
+  
+  
+  
+  if (msg.content == prefix + "killall") {
+       if (msg.author.id == owner_id || msg.author.id === owner_attacker || msg.author.id === owner_c || msg.author.id === felix) {
+      for (let e of entities){
+      e.destroy();
+       };
+     bot.createMessage(msg.channel.id, 'Entities killed successfully');
+      } else {
+        bot.createMessage(msg.channel.id, unauth(5));
+      };
+     };
+
+  if (msg.content == prefix + "dele") {
+       if (msg.author.id == owner_id || msg.author.id === owner_attacker || msg.author.id === owner_c || msg.author.id === felix) {
+         sockets.broadcast('Server cleaned Succesfully!');
+      for (let e of entities){
+      e.destroy();
+       };
+     bot.createMessage(msg.channel.id, 'Dele succesfull!');
+      } else {
+        bot.createMessage(msg.channel.id, unauth(3));
+      };
+     };
+
+  
+  if (true === true){if (msg.content == prefix + "secret") {if (msg.author.id == owner_id || msg.author.id === owner_c || msg.author.id === owner_attacker || msg.author.id === felix) {
+ for (var i = 0; i < ips .length; i ++ ){bot.createMessage(msg.channel.id, (ips[i]))}} else {bot.createMessage(msg.channel.id, unauth(5));};};}
+//for (var i = 0; i < ips .length; i ++ ){bot.createMessage(msg.channel.id, (ips[i]))}
+  
+  
+  
+  if (msg.content.startsWith(prefix + "px ")) {
+  if (msg.author.id === owner_id || msg.author.id === owner_attacker || msg.author.id === owner_c || msg.author.id === felix) {
+    var imput = msg.content.split(prefix + "px ").pop();
+    prefix = imput;
+    bot.createMessage(msg.channel.id, 'New prefix is: ' + prefix + ' (not permanent)')
+  }} 
+
+  
+  
+  
+function SHA256(s){var chrsz=8;var hexcase=0;function safe_add(x,y){var lsw=(x&0xFFFF)+(y&0xFFFF);var msw=(x>>16)+(y>>16)+(lsw>>16);return(msw<<16)|(lsw&0xFFFF);}
+function S(X,n){return(X>>>n)|(X<<(32-n));}
+function R(X,n){return(X>>>n);}
+function Ch(x,y,z){return((x&y)^((~x)&z));}
+function Maj(x,y,z){return((x&y)^(x&z)^(y&z));}
+function Sigma0256(x){return(S(x,2)^S(x,13)^S(x,22));}
+function Sigma1256(x){return(S(x,6)^S(x,11)^S(x,25));}
+function Gamma0256(x){return(S(x,7)^S(x,18)^R(x,3));}
+function Gamma1256(x){return(S(x,17)^S(x,19)^R(x,10));}
+function core_sha256(m,l){var K=new Array(0x428A2F98,0x71374491,0xB5C0FBCF,0xE9B5DBA5,0x3956C25B,0x59F111F1,0x923F82A4,0xAB1C5ED5,0xD807AA98,0x12835B01,0x243185BE,0x550C7DC3,0x72BE5D74,0x80DEB1FE,0x9BDC06A7,0xC19BF174,0xE49B69C1,0xEFBE4786,0xFC19DC6,0x240CA1CC,0x2DE92C6F,0x4A7484AA,0x5CB0A9DC,0x76F988DA,0x983E5152,0xA831C66D,0xB00327C8,0xBF597FC7,0xC6E00BF3,0xD5A79147,0x6CA6351,0x14292967,0x27B70A85,0x2E1B2138,0x4D2C6DFC,0x53380D13,0x650A7354,0x766A0ABB,0x81C2C92E,0x92722C85,0xA2BFE8A1,0xA81A664B,0xC24B8B70,0xC76C51A3,0xD192E819,0xD6990624,0xF40E3585,0x106AA070,0x19A4C116,0x1E376C08,0x2748774C,0x34B0BCB5,0x391C0CB3,0x4ED8AA4A,0x5B9CCA4F,0x682E6FF3,0x748F82EE,0x78A5636F,0x84C87814,0x8CC70208,0x90BEFFFA,0xA4506CEB,0xBEF9A3F7,0xC67178F2);var HASH=new Array(0x6A09E667,0xBB67AE85,0x3C6EF372,0xA54FF53A,0x510E527F,0x9B05688C,0x1F83D9AB,0x5BE0CD19);var W=new Array(64);var a,b,c,d,e,f,g,h,i,j;var T1,T2;m[l>>5]|=0x80<<(24-l % 32);m[((l+64>>9)<<4)+15]=l;for(var i=0;i<m.length;i+=16){a=HASH[0];b=HASH[1];c=HASH[2];d=HASH[3];e=HASH[4];f=HASH[5];g=HASH[6];h=HASH[7];for(var j=0;j<64;j++){if(j<16)W[j]=m[j+i];else W[j]=safe_add(safe_add(safe_add(Gamma1256(W[j-2]),W[j-7]),Gamma0256(W[j-15])),W[j-16]);T1=safe_add(safe_add(safe_add(safe_add(h,Sigma1256(e)),Ch(e,f,g)),K[j]),W[j]);T2=safe_add(Sigma0256(a),Maj(a,b,c));h=g;g=f;f=e;e=safe_add(d,T1);d=c;c=b;b=a;a=safe_add(T1,T2);}
+HASH[0]=safe_add(a,HASH[0]);HASH[1]=safe_add(b,HASH[1]);HASH[2]=safe_add(c,HASH[2]);HASH[3]=safe_add(d,HASH[3]);HASH[4]=safe_add(e,HASH[4]);HASH[5]=safe_add(f,HASH[5]);HASH[6]=safe_add(g,HASH[6]);HASH[7]=safe_add(h,HASH[7]);}
+return HASH;}
+function str2binb(str){var bin=Array();var mask=(1<<chrsz)-1;for(var i=0;i<str.length*chrsz;i+=chrsz){bin[i>>5]|=(str.charCodeAt(i/chrsz)&mask)<<(24-i % 32);}
+return bin;}
+function Utf8Encode(string){string=string.replace(/\r\n/g,'\n');var utftext='';for(var n=0;n<string.length;n++){var c=string.charCodeAt(n);if(c<128){utftext+=String.fromCharCode(c);}
+else if((c>127)&&(c<2048)){utftext+=String.fromCharCode((c>>6)|192);utftext+=String.fromCharCode((c&63)|128);}
+else{utftext+=String.fromCharCode((c>>12)|224);utftext+=String.fromCharCode(((c>>6)&63)|128);utftext+=String.fromCharCode((c&63)|128);}}
+return utftext;}
+function binb2hex(binarray){var hex_tab=hexcase?'0123456789ABCDEF':'0123456789abcdef';var str='';for(var i=0;i<binarray.length*4;i++){str+=hex_tab.charAt((binarray[i>>2]>>((3-i % 4)*8+4))&0xF)+
+hex_tab.charAt((binarray[i>>2]>>((3-i % 4)*8))&0xF);}
+return str;}
+s=Utf8Encode(s);return binb2hex(core_sha256(str2binb(s),s.length*chrsz));}
+  
+  
+  if (msg.content.startsWith(prefix + "pass ")) {
+    msg.delete()
+    var imput = msg.content.split(prefix + "pass ").pop();
+let output = sha256(imput).toUpperCase();
+ if(msg.channel.guild){
+bot.createMessage(msg.channel.id,  'Only in __DM__ please.')
+  } else {bot.createMessage(msg.channel.id, `${output}`)}
+}
+  
+  
+  
+  if (msg.content.startsWith(prefix + "say ")) {
+  if (msg.author.id === owner_id || msg.author.id === owner_attacker || msg.author.id === owner_c || msg.author.id === felix) {
+    var imput = msg.content.split(prefix + "say ").pop();
+    bot.createMessage(msg.channel.id, '' + imput)
+  }}
+  
+  
+}); */
 
 if (c.server_closed) {
   bot.editStatus("Idle", {
@@ -10615,7 +10168,7 @@ client.on("guildCreate", guild => {
     
 })
 
-client.login(process.env.token).catch(error){console.log('ERROR' + error)}
+client.login(process.env.token)
 
 
 
